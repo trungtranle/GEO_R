@@ -1,0 +1,137 @@
+---
+title: "GSE81993"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+#setwd('E:\\GEO_analysis')
+getwd()
+```
+```{r}
+library(Biobase)
+library(GEOquery)
+library(limma)
+library(affy)
+library(lattice)
+```
+```{r}
+gset <- getGEO("GSE81993", GSEMatrix =TRUE, AnnotGPL=TRUE)
+```
+
+
+```{r}
+class(gset)
+length(gset)
+```
+
+```{r}
+gset <- gset[[1]]
+class(gset)
+```
+```{r}
+
+fvarLabels(gset) <- make.names(fvarLabels(gset)) #make column name
+```
+```{r}
+dim(pData(phenoData(gset)))
+colnames(pData(phenoData(gset)))
+```
+```{r}
+library(stringr)
+```
+```{r}
+pData(gset)[,1]
+```
+```{r}
+str_extract(pData(gset)[,1], '([A-Z]{2,4}_[A-Z]{3,4})')
+tr <- factor((str_extract(pData(gset)[,1], '([A-Z]{2,4}_[A-Z]{3,4})')))
+print(tr)
+class(tr)
+```
+```{r}
+par(mfrow=c(1,2))
+hist(exprs(gset))
+hist(2^exprs(gset))
+```
+```{r}
+gset$description <- tr
+design <- model.matrix(~ description + 0, gset) #create sample matrix
+colnames(design) <- levels(tr) #set sample matrix as levels of treatments
+
+fit <- lmFit(gset, design)
+fit
+```
+```{r}
+cont.matrix <- makeContrasts(KO_FED-CTRL_FAST, CTRL_FED-CTRL_FAST, KO_FAST-CTRL_FED, KO_FED-KO_FAST, levels=design)
+cont.matrix
+```
+```{r}
+fit2 <- contrasts.fit(fit, cont.matrix)
+fit2 <- eBayes(fit2, 0.01) #Empirical Bayes Statistics for Differential Expression 
+```
+```{r}
+tT <- topTable(fit2, adjust="fdr", sort.by="B", number=250) #using False Discovery Rate adjustment, sort.by B: B-statstic
+
+#tT <- subset(tT, select=c("adj.P.Val","P.Value","F","Gene.symbol","Gene.title"))
+
+```
+##250 top genes
+
+```{r}
+tT
+```
+```{r}
+colnames(tT)
+```
+```{r}
+#Update with latest NCBI Annotation
+gpl <- annotation(gset)
+platf <- getGEO(gpl, AnnotGPL=TRUE)
+ncbifd <- data.frame(attr(dataTable(platf), "table"))
+
+tT <- tT[setdiff(colnames(tT), setdiff(fvarLabels(gset), "ID"))]
+tT <- merge(tT, ncbifd, by="ID")
+tT <- tT[order(tT$P.Value), ] 
+colnames(tT)
+```
+### TOP 5 genes
+
+```{r}
+head(tT)[1:5,c(1:11)]
+
+```
+```{r}
+colnames(gset) <- pData(gset)[,2]
+ex = exprs(gset)[, order(tr)]
+labels = levels(tr)
+palette(c("#dfeaf4","#f4dfdf","#f2cb98", "#AABBCC"))
+
+par(mar=c(2+round(max(nchar(sampleNames(gset)))/2),4,2,1))
+title <- paste ("GSE81993", '/', annotation(gset), " selected samples", sep ='')
+boxplot(ex, boxwex=0.6, notch=T, main=title, outline=FALSE, las=2, col=tr)
+
+legend("topleft", labels , fill=palette(), bty="n")
+
+```
+```{r}
+require(reshape2)
+df_test <- melt(ex, id.var = colnames(ex))
+head(df_test)
+bwplot(Var2 ~ value, df_test, groups = tr, fill = tr)
+```
+## Plot Expression Values for top 5 genes
+```{r}
+
+for (i in 1:5) {
+  par(mar=c(6,2,2,6), xpd=TRUE)
+  barplot(ex[tT[i,1],], col = tr, las = 2)
+  
+  title(paste('Expression value',tT[i,1],"\n Gene symbol",tT[i,11]))
+  
+  legend("bottomright", labels , fill=palette(), bty="n", inset=c(-0.27,0))
+
+
+}
+```

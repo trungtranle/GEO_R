@@ -1,0 +1,133 @@
+---
+title: "GSE28440"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r}
+library(Biobase)
+library(GEOquery)
+library(limma)
+library(affy)
+library(lattice)
+```
+```{r}
+gset <- getGEO('GSE28440', AnnotGPL = TRUE, GSEMatrix = TRUE)
+```
+```{r}
+gset <- gset[[1]]
+class(gset)
+```
+
+```{r}
+fvarLabels(gset) <- make.names(fvarLabels(gset))
+fvarLabels(gset)
+
+```
+```{r}
+#print(pData(gset))
+print(colnames(pData(gset)))
+
+```
+```{r}
+pData(gset[, c(1:3,13:15)])
+
+```
+```{r}
+gset_BAT <- gset[, c(1:3, 13:15)]
+pData(gset_BAT)
+
+```
+```{r}
+# tr <- pData(gset_BAT)[,1]
+# tr <- as.vector(tr)
+# tr <- as.factor(tr)
+tr <- as.factor(c("HF","HF","HF","ND", "ND", "ND"))
+tr
+```
+```{r}
+hist(exprs(gset_BAT))
+
+```
+```{r}
+gset_BAT$description <- tr
+design <- model.matrix(~ description + 0, gset_BAT) #create sample matrix
+colnames(design)
+colnames(design) <- levels(tr) #set sample matrix as levels of treatments
+fit <- lmFit(gset_BAT, design)
+fit
+```
+```{r}
+cont.matrix <- makeContrasts(ND - HF, levels=design)
+cont.matrix
+```
+```{r}
+fit2 <- contrasts.fit(fit, cont.matrix)
+fit2 <- eBayes(fit2, 0.01)
+tT <- topTable(fit2, adjust="fdr", sort.by="B", number = 35557)
+head(tT)
+```
+```{r}
+#Update with latest NCBI Annotation
+gpl <- annotation(gset)
+platf <- getGEO(gpl, AnnotGPL=TRUE)
+ncbifd <- data.frame(attr(dataTable(platf), "table"))
+
+tT <- tT[setdiff(colnames(tT), setdiff(fvarLabels(gset), "ID"))]
+tT <- merge(tT, ncbifd, by="ID")
+tT <- tT[order(tT$P.Value), ] 
+print(colnames(tT))
+head(tT)
+```
+```{r}
+palette(c("#dfeaf4","#f4dfdf"))
+ex = exprs(gset_BAT)[, order(tr)]
+colnames(ex) <- pData(gset_BAT)[,2]
+
+title <- paste ("GSE28440", '/', annotation(gset), " selected samples", sep ='')
+require(reshape2)
+df_test <- melt(ex, id.var = colnames(ex))
+head(df_test)
+bwplot(Var2 ~ value, df_test, groups = tr, fill = tr, main = title,
+       auto.key=TRUE)
+
+```
+
+```{r}
+palette(c("#dfeaf4","#f4dfdf"))
+for (i in 1:20) {
+  title <- paste('Expression value',tT[i,1],"\n Gene symbol",tT[i,9])
+  p <- barchart(ex[as.character(tT[i,1]),], main = title, col = tr,
+                xlab = 'Expression value',
+                auto.key=TRUE)
+  
+  print(p)
+
+}
+
+```
+
+```{r}
+match('Foxo1', tT[,9])
+match(56458, tT[,10])
+
+
+```
+```{r}
+tT[17194,]
+```
+
+```{r}
+ex[21887,]
+```
+## It seems like FoxO1 did not change in the BAT (adj p value > 0.05, logFC ~ 0)
+
+```{r fig.height=7, fig.width=7}
+library(gplots)
+library(RColorBrewer)
+heatmap.2(ex[as.numeric(rownames(tT))[1:500],], trace = "none", col = redgreen(100))
+heatmap.2(ex[as.numeric(rownames(tT))[1:50],], trace = "none", col = redgreen(100))
+
+```
+
